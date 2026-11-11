@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#8fd3ff">
+  <title>Must Go Up</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗼</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js" defer></script>
+  <script src="/socket.io/socket.io.js"></script>
+</head>
+<body>
+  <canvas id="game" tabindex="0"></canvas>
+
+  <!-- ============ Screens ============ -->
+  <section id="s-home" class="screen active">
+    <div class="home-card">
+      <div class="logo"><span class="logo-tower">🗼</span><h1>Must Go Up</h1><p>Race your class to the top of the tower!</p></div>
+      <div class="home-buttons">
+        <button class="btn big primary" id="btn-host">🎓 Host Game</button>
+        <button class="btn big" id="btn-join">🐰 Join Game</button>
+      </div>
+      <p class="tiny muted">Works in Chrome, Edge and Safari on computers and tablets.</p>
+    </div>
+  </section>
+
+  <section id="s-host" class="screen">
+    <div class="host-layout">
+      <div class="host-left card">
+        <div class="room-code-label">Join at <b id="join-host"></b> with code</div>
+        <div class="room-code" id="room-code">····</div>
+        <img id="qr" alt="QR code to join" width="180" height="180">
+        <a id="join-link" class="tiny" target="_blank" rel="noopener"></a>
+        <h3><span id="player-count">0</span> joined</h3>
+        <div id="host-players" class="player-grid"></div>
+      </div>
+      <div class="host-right">
+        <div class="tabs">
+          <button class="tab active" data-tab="t-questions">📝 Questions</button>
+          <button class="tab" data-tab="t-settings">⚙️ Settings</button>
+        </div>
+        <div id="t-questions" class="tabpane card active">
+          <div id="drop" class="drop">
+            <div>Drop a <b>.csv</b> file here, or</div>
+            <label class="btn">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv" hidden></label>
+          </div>
+          <div class="row gap">
+            <a class="btn small" href="/template.csv" download="must-go-up-template.csv">⬇️ Download template</a>
+            <button class="btn small" id="btn-sample">Use sample bank</button>
+          </div>
+          <p class="tiny muted">Columns: Question, Correct Answer, Incorrect Answer 1, Incorrect Answer 2 (optional), Incorrect Answer 3 (optional). Answers are shuffled every time.</p>
+          <div id="bank-status" class="bank-status"></div>
+          <div id="bank-report"></div>
+          <div id="bank-preview"></div>
+        </div>
+        <div id="t-settings" class="tabpane card">
+          <form id="settings-form" class="settings-grid"></form>
+          <div id="host-profile-box" class="host-profile" hidden>
+            <p>You are playing too. <button type="button" class="btn small" id="btn-host-char">Choose my animal</button> <span id="host-char-label"></span></p>
+          </div>
+        </div>
+        <div class="start-row">
+          <span id="start-hint" class="muted"></span>
+          <button class="btn big primary" id="btn-start">▶ Start</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-join" class="screen">
+    <form class="card narrow" id="join-form" autocomplete="off">
+      <h2>Join a game</h2>
+      <label>Game code<input id="join-code" maxlength="4" placeholder="ABCD" autocapitalize="characters" required></label>
+      <label>Your first name<input id="join-name" maxlength="16" placeholder="First name" required></label>
+      <p class="error" id="join-error"></p>
+      <div class="row gap">
+        <button type="button" class="btn" data-go="s-home">Back</button>
+        <button class="btn primary" type="submit">Next ▶</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="s-char" class="screen">
+    <div class="char-layout">
+      <div class="card char-preview-card">
+        <canvas id="char-preview" width="320" height="320"></canvas>
+        <div id="char-name" class="char-name"></div>
+      </div>
+      <div class="card char-options">
+        <h3>Pick your animal</h3>
+        <div id="animal-grid" class="animal-grid"></div>
+        <h3>Colour</h3>
+        <div id="tint-row" class="swatches"></div>
+        <h3>Hat</h3>
+        <div id="hat-row" class="chips"></div>
+        <h3>Trail</h3>
+        <div id="trail-row" class="chips"></div>
+        <div class="row gap end">
+          <button class="btn big primary" id="btn-char-done">Ready! ✔</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="s-wait" class="screen">
+    <div class="card narrow center">
+      <h2>You're in, <span id="wait-name"></span>!</h2>
+      <p>Waiting for your teacher to press Start…</p>
+      <div id="wait-players" class="player-grid small"></div>
+      <button class="btn" id="btn-change-char">Change my animal</button>
+    </div>
+  </section>
+
+  <section id="s-results" class="screen">
+    <div class="results-layout">
+      <canvas id="podium" width="640" height="300"></canvas>
+      <div class="card results-card">
+        <h2 id="results-title">Results</h2>
+        <div id="team-results"></div>
+        <div class="table-wrap"><table id="results-table"></table></div>
+        <div id="host-results" hidden></div>
+        <div class="row gap end">
+          <button class="btn" id="btn-results-csv">⬇️ Download results</button>
+          <button class="btn primary" id="btn-again" hidden>🔁 Back to lobby</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ In-game HUD ============ -->
+  <div id="hud" hidden>
+    <div id="altimeter"><div class="alt-bar" id="alt-bar"><div id="alt-dots"></div></div><div class="alt-label">800</div></div>
+    <div id="top-center"><div id="zone-label">Blossom Meadow · Block 0 / 800</div><div id="timer" hidden></div><div id="team-label" hidden></div></div>
+    <div id="top-right">
+      <div id="tokens" title="Jump Tokens"><span class="token-ico">🪙</span><b id="token-count">0</b></div>
+      <button class="icon-btn" id="btn-board" title="Leaderboard (Tab)">🏆</button>
+      <button class="icon-btn" id="btn-settings" title="Settings">⚙️</button>
+      <button class="icon-btn" id="btn-teacher" title="Teacher controls" hidden>🎓</button>
+    </div>
+    <div id="bottom-right">
+      <div id="meters">
+        <div class="meter" id="fuel-meter" hidden><span>🚀</span><div class="meter-bar"><i></i></div></div>
+        <div class="meter" id="oxy-meter" hidden><span>🫁</span><div class="meter-bar"><i></i></div><b></b></div>
+      </div>
+      <div id="effects"></div>
+      <div id="slots"></div>
+    </div>
+    <div id="prompt" hidden></div>
+    <div id="touch" hidden>
+      <div id="joy"><div id="joy-knob"></div></div>
+      <button id="t-jump" class="tbtn">⤒<small>Jump</small></button>
+      <button id="t-item" class="tbtn">✋<small>Item</small></button>
+      <button id="t-rewind" class="tbtn" hidden>⏪<small>Rewind</small></button>
+      <button id="t-emote" class="tbtn small">😀</button>
+    </div>
+    <div id="emote-wheel" hidden></div>
+  </div>
+
+  <div id="gate-panel" class="overlay-panel" hidden>
+    <div class="gate-card">
+      <div class="gate-head">
+        <span class="owl">🦉</span>
+        <div id="gate-dots" class="dots"></div>
+        <button class="icon-btn" id="btn-speak" title="Read aloud">🔊</button>
+        <button class="btn small" id="btn-hint">🔍 Hint <b id="hint-count"></b></button>
+      </div>
+      <div id="gate-question" class="gate-question"></div>
+      <div id="gate-options" class="gate-options"></div>
+      <div id="gate-cool" class="cooldown" hidden><svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="19" class="bg"/><circle cx="22" cy="22" r="19" class="fg" id="cool-ring"/></svg><span>Next question soon…</span></div>
+      <p class="tiny muted center">Step off the pad to leave the gate.</p>
+    </div>
+  </div>
+
+  <div id="shop-panel" class="overlay-panel" hidden>
+    <div class="shop-card">
+      <div class="shop-head"><span class="merchant">🦝</span><div><h2>Raccoon's Shop</h2><p class="muted">Spend your Jump Tokens! You have <b id="shop-tokens">0</b> 🪙</p></div><button class="icon-btn" id="btn-shop-close" title="Close">✖</button></div>
+      <div id="shop-items" class="shop-items"></div>
+      <div id="shop-undo" class="undo-bar" hidden><span id="undo-text"></span><button class="btn small" id="btn-undo">Undo</button></div>
+    </div>
+  </div>
+
+  <div id="board-panel" class="overlay-panel" hidden>
+    <div class="card board-card"><div class="row between"><h2>🏆 Leaderboard</h2><button class="icon-btn" data-close="board-panel">✖</button></div><div id="board-list"></div></div>
+  </div>
+
+  <div id="settings-panel" class="overlay-panel" hidden>
+    <div class="card settings-card">
+      <div class="row between"><h2>⚙️ Settings</h2><button class="icon-btn" data-close="settings-panel">✖</button></div>
+      <label class="slider">🎵 Music <input type="range" id="set-music" min="0" max="1" step="0.05"></label>
+      <label class="slider">🔔 Sound effects <input type="range" id="set-sfx" min="0" max="1" step="0.05"></label>
+      <label class="slider">🎥 Camera speed <input type="range" id="set-sens" min="0.3" max="2" step="0.1"></label>
+      <label class="check"><input type="checkbox" id="set-invert"> Invert camera up/down</label>
+      <label class="check"><input type="checkbox" id="set-large"> Large text</label>
+      <label class="check"><input type="checkbox" id="set-motion"> Reduced motion</label>
+      <label class="check"><input type="checkbox" id="set-lefty"> Left-handed tablet layout</label>
+      <label class="slider">✨ Graphics <select id="set-quality"><option value="auto">Auto</option><option value="high">High</option><option value="low">Low</option></select></label>
+      <div class="controls-help">
+        <h3>Controls</h3>
+        <p><b>Move</b> WASD / arrows · <b>Jump</b> Space (2× double jump, 3× jetpack) · <b>Camera</b> mouse or right-drag, scroll to zoom · <b>Item</b> E or click · <b>Slots</b> 1–4 · <b>Rewind</b> R · <b>Emote</b> T then 1–4 · <b>Leaderboard</b> Tab</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="teacher-panel" class="overlay-panel" hidden>
+    <div class="card teacher-card">
+      <div class="row between"><h2>🎓 Teacher controls</h2><button class="icon-btn" data-close="teacher-panel">✖</button></div>
+      <div class="row gap wrap">
+        <button class="btn" id="btn-pause">⏸ Pause everyone</button>
+        <button class="btn" id="btn-offense">🥊 Offensive items: <b id="offense-state">On</b></button>
+        <button class="btn danger" id="btn-end">⏹ End game</button>
+      </div>
+      <h3>Players</h3>
+      <div id="teacher-players"></div>
+    </div>
+  </div>
+
+  <div id="spectator" hidden>
+    <div id="spec-tower"><div id="spec-bar"></div></div>
+    <div id="spec-top" class="card"><h3>🏆 Top 5</h3><ol id="spec-list"></ol><p class="tiny muted">Click a name to follow them.</p></div>
+    <div id="spec-info" class="card"><b id="spec-code"></b><span id="spec-timer"></span><button class="btn small" id="btn-spec-board">🏆 Leaderboard</button><button class="btn small" id="btn-spec-teacher">🎓 Teacher controls</button></div>
+  </div>
+
+  <div id="countdown" hidden></div>
+  <div id="banner" hidden></div>
+  <div id="toasts"></div>
+  <div id="fade"></div>
+  <div id="pause-overlay" hidden><div class="card center"><h1>⏸ Paused</h1><p>Your teacher paused the game.</p></div></div>
+  <div id="loading" hidden><div class="spinner"></div><p>Building the tower…</p></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
