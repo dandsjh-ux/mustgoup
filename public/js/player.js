@@ -1,6 +1,6 @@
 // Local character controller: a capsule-ish cylinder against boxes and discs at a fixed 60 Hz.
 import * as THREE from 'three';
-import { PHYS } from './shared/tower.js';
+import { PHYS, BOOST_R } from './shared/tower.js';
 import { AnimalModel, ANIM, Trail } from './animals.js';
 import { audio } from './audio.js';
 
@@ -9,7 +9,7 @@ const RAD = PHYS.radius;
 const V1 = Math.sqrt(2 * PHYS.g * PHYS.jump1);
 const V2 = Math.sqrt(2 * PHYS.g * PHYS.jump2);
 const SAFE_KINDS = new Set(['deck', 'pad', 'dome', 'summit']);
-const STABLE = new Set(['normal', 'pad', 'landing', 'deck', 'ice', 'conveyor', 'barrel', 'boom', 'jelly', 'dome', 'summit', 'bounce', 'bouncy', 'leaf', 'slide', 'drift', 'airship', 'gear', 'piston', 'sink']);
+const STABLE = new Set(['normal', 'rope', 'pad', 'landing', 'deck', 'ice', 'conveyor', 'barrel', 'boom', 'jelly', 'dome', 'summit', 'bounce', 'bouncy', 'leaf', 'slide', 'drift', 'airship', 'gear', 'piston', 'sink']);
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -49,6 +49,7 @@ export class LocalPlayer {
     this.respawning = false;
     this.onShieldUsed = () => {};
     this.onPushed = () => {};
+    this.onBoost = () => {};
   }
 
   dispose() {
@@ -116,6 +117,22 @@ export class LocalPlayer {
     this.grounded = false;
     this.ground = null;
     this.jumps = 1;
+  }
+
+  // Zone boost pads and geysers: launch straight up to roughly h blocks (scaled for low gravity).
+  canBoost() {
+    return !this.launch && !this.inBubble && !this.respawning;
+  }
+
+  boost(h) {
+    this.vel.y = Math.sqrt(2 * PHYS.g * this.gravMult * h);
+    this.grounded = false;
+    this.ground = null;
+    this.coyote = 0;
+    this.jumps = 1; // the double jump is still available at the top
+    this.jet.active = false;
+    this.model.setAnim(ANIM.flip);
+    this.onBoost();
   }
 
   addFlow(vx, vz) {
@@ -253,6 +270,13 @@ export class LocalPlayer {
     if (this.pos.y < 2) {
       const r = Math.hypot(this.pos.x, this.pos.z);
       if (r > 29.5) { this.pos.x *= 29.5 / r; this.pos.z *= 29.5 / r; }
+    }
+
+    // stepping onto a zone boost pad launches you
+    const bg = this.grounded ? this.ground : null;
+    if (bg && bg.boost && Math.hypot(this.pos.x - (bg.cx + bg.boost.ox), this.pos.z - (bg.cz + bg.boost.oz)) < BOOST_R && this.canBoost()) {
+      this.boost(bg.boost.h);
+      audio.play('boost');
     }
 
     if (this.grounded) {

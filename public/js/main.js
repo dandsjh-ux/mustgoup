@@ -99,6 +99,7 @@ class Game {
       this.player = new LocalPlayer(this.scene, this.world, meInfo.profile);
       this.player.onShieldUsed = () => { net.emit('shield:used'); toast('🛡️ Your Bubble Shield blocked a push!', 'good'); };
       this.player.onPushed = () => this.shake(0.25);
+      this.player.onBoost = () => this.shake(0.12);
       this.myName = meInfo.name;
       this.myProfile = meInfo.profile;
       this.respawn(true);

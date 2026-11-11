@@ -4,7 +4,7 @@ import * as THREE from 'three';
 import { ZONES, ZONE_H, SPIRE_R, DECK_R, GROUND_R, platformMotion, zoneAt, mulberry32 } from './shared/tower.js';
 import { toon, AnimalModel, emojiSprite, emojiTexture } from './animals.js';
 
-const STATIC_KINDS = new Set(['normal', 'pad', 'landing', 'bounce', 'ice', 'bouncy', 'barrel', 'boom', 'jelly', 'dome']);
+const STATIC_KINDS = new Set(['normal', 'rope', 'pad', 'landing', 'bounce', 'ice', 'bouncy', 'barrel', 'boom', 'jelly', 'dome']);
 const BUCKET = 4;
 
 const KIND_COLORS = {
@@ -23,6 +23,15 @@ const KIND_COLORS = {
   crumble: ['#8a8270', '#b3b58f'],
   airship: ['#6b4523', '#b07a45'],
   dome: [null, '#cfe8ff'],
+  rope: ['#6b4a2b', '#e8c98a'],
+};
+
+// Zone boost pads: a glowing disc with a bobbing icon. Walking onto it launches you upward.
+const BOOST_THEME = {
+  1: { icon: '🌼', color: '#ffd23d' }, 2: { icon: '🍄', color: '#ff5c5c' }, 3: { icon: '🐸', color: '#4ecdc4' },
+  4: { icon: '❄️', color: '#8fd0ff' }, 5: { icon: '🌈', color: '#ff8fc8' }, 6: { icon: '🎈', color: '#ffa94d' },
+  7: { icon: '⚙️', color: '#e3c15a' }, 8: { icon: '⚡', color: '#ffe14d' }, 9: { icon: '⚓', color: '#ff7a45' },
+  10: { icon: '🚀', color: '#a78bfa' },
 };
 
 function boxGeoWithShade(sideX = 0.82, sideZ = 0.74) {
@@ -69,6 +78,7 @@ export class World {
     this.tower = tower;
     this.plats = tower.plats;
     this.dynamic = [];
+    this.boostAnims = [];
     this.temp = [];
     this.buckets = new Map();
     this.zoneGroups = [];
@@ -183,6 +193,8 @@ export class World {
       for (const p of list) {
         if (p.kind === 'pad') this.padRing(p);
         if (p.kind === 'bounce') this.flowerPad(p);
+        if (p.kind === 'rope') this.ropePosts(p);
+        if (p.boost) this.boostPad(p);
         if (p.kind === 'dome') {
           const d = new THREE.Mesh(this.sphereGeo, new THREE.MeshBasicMaterial({ color: '#8fd3ff', transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
           d.scale.set(2.4, 2.4, 2.4);
@@ -200,6 +212,51 @@ export class World {
     ring.position.set(p.x, p.top + 0.08, p.z);
     this.zoneGroups[p.zone].add(ring);
     p.ringMesh = ring;
+  }
+
+  // Tightrope: little posts with knobs at both ends of the slim beam
+  ropePosts(p) {
+    const alongX = p.hx > p.hz;
+    const knob = toon('#8a5a2b');
+    const post = toon('#6b4a2b');
+    for (const sd of [-1, 1]) {
+      const x = p.x + (alongX ? sd * (p.hx - 0.12) : 0);
+      const z = p.z + (alongX ? 0 : sd * (p.hz - 0.12));
+      const c = new THREE.Mesh(this.cylGeo, post);
+      c.scale.set(0.07, 0.55, 0.07);
+      c.position.set(x, p.top + 0.27, z);
+      const k = new THREE.Mesh(this.sphereGeo, knob);
+      k.scale.setScalar(0.15);
+      k.position.set(x, p.top + 0.58, z);
+      this.zoneGroups[p.zone].add(c, k);
+    }
+  }
+
+  boostPad(p) {
+    const th = BOOST_THEME[p.zone] || BOOST_THEME[1];
+    const b = p.boost;
+    const g = new THREE.Group();
+    g.position.set(p.x + b.ox, p.top, p.z + b.oz);
+    const disc = new THREE.Mesh(this.cylGeo, new THREE.MeshToonMaterial({ color: th.color, emissive: th.color, emissiveIntensity: 0.55, gradientMap: toon('#fff').gradientMap }));
+    disc.scale.set(0.95, 0.07, 0.95);
+    disc.position.y = 0.04;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.95, 0.07, 6, 28), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.1;
+    g.add(disc, ring);
+    // two stacked chevrons that rise and fade, showing the way up
+    const chev = [];
+    for (let i = 0; i < 2; i++) {
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.3, 4), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.9, depthWrite: false }));
+      c.rotation.y = Math.PI / 4;
+      g.add(c);
+      chev.push(c);
+    }
+    const icon = emojiSprite(th.icon, 0.8);
+    icon.material.depthTest = true;
+    g.add(icon);
+    this.zoneGroups[p.zone].add(g);
+    (this.boostAnims = this.boostAnims || []).push({ p, g, chev, icon, ring });
   }
 
   flowerPad(p) {
@@ -871,6 +928,16 @@ export class World {
     const cz = zoneAt(Math.max(0, focusY));
     for (let z = 1; z <= 10; z++) this.zoneGroups[z].visible = Math.abs(z - cz) <= 1;
 
+    for (const b of this.boostAnims || []) {
+      if (!b.g.parent?.visible) continue;
+      b.chev.forEach((c, i) => {
+        const k = (t * 1.1 + i * 0.5) % 1;
+        c.position.y = 0.25 + k * 0.9;
+        c.material.opacity = 0.9 * (1 - k);
+      });
+      b.icon.position.y = 1.7 + Math.sin(t * 3 + b.p.id) * 0.12;
+      b.ring.scale.setScalar(1 + Math.sin(t * 5 + b.p.id) * 0.05);
+    }
     for (const p of this.dynamic) {
       const g = p.mesh;
       g.position.set(p.cx, p.ctop, p.cz);

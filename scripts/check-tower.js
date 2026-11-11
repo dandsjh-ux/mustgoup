@@ -1,6 +1,6 @@
 // Reachability check: every step on the main route must fit that zone's jump limits.
 // Run: npm run check
-import { buildTower, ZONES, edgeGap } from '../public/js/shared/tower.js';
+import { buildTower, ZONES, edgeGap, SPIRE_R, PHYS, CEIL_TOP, CEIL_H, ropeWidth } from '../public/js/shared/tower.js';
 
 let failures = 0;
 for (const spacing of [15, 30, 60]) {
@@ -25,6 +25,21 @@ for (const spacing of [15, 30, 60]) {
         }
       }
     }
+    // tightropes: at least one per zone, slim, clear of the spire; geysers / boost pads must clear the gate ceiling
+    const ropeZones = new Set(t.plats.filter((p) => p.kind === 'rope').map((p) => p.zone));
+    const zonesReached = new Set(t.gates.map((g) => g.zone));
+    for (const z of zonesReached) if (spacing >= 30 && !ropeZones.has(z)) { failures++; if (failures < 15) console.log(`seed ${seed} spacing ${spacing}: no tightrope in zone ${z}`); }
+    for (const p of t.plats) {
+      if (p.kind === 'rope') {
+        const near = Math.hypot(Math.max(0, Math.abs(p.x) - p.hx), Math.max(0, Math.abs(p.z) - p.hz));
+        if (near < SPIRE_R + 0.5 || Math.min(p.sx, p.sz) > ropeWidth(p.zone) + 1e-6) { failures++; if (failures < 15) console.log(`seed ${seed} bad rope ${p.id}: spire distance ${near.toFixed(2)} sx ${p.sx} sz ${p.sz}`); }
+      }
+      const b = p.spout || p.boost;
+      if (b) {
+        const g = t.gates.find((q) => q.i === p.seg);
+        if (p.top + b.h + PHYS.height > g.y - CEIL_TOP - CEIL_H + 1e-6 || Math.abs(b.ox) > p.hx - 0.9 || Math.abs(b.oz) > p.hz - 0.9) { failures++; if (failures < 15) console.log(`seed ${seed} bad boost on ${p.id} h=${b.h}`); }
+      }
+    }
     // overlaps between any two box platforms with too little headroom
     const boxes = t.plats.filter((p) => !p.noSide);
     for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
@@ -35,7 +50,7 @@ for (const spacing of [15, 30, 60]) {
         if (failures < 15) console.log(`seed ${seed} overlap ${a.id}(${a.kind},${a.route}) ${b.id}(${b.kind},${b.route}) dy=${(b.top - a.top).toFixed(2)}`);
       }
     }
-    if (s === 1) console.log(`spacing ${spacing}: sizes ${JSON.stringify(t.plats.filter((p) => p.route === 'main' && p.kind !== 'pad').reduce((m, p) => ((m[p.sx] = (m[p.sx] || 0) + 1), m), {}))}, movers ${t.plats.filter((p) => ['mover', 'lift'].includes(p.kind)).length}, birds ${t.feats.filter((f) => f.type === 'bird').length}, spouts ${t.feats.filter((f) => f.type === 'spout').length}, ${t.plats.length} platforms, ${t.gates.length} gates, ${t.checkpoints.length} checkpoints, shortcuts ${t.plats.filter((p) => p.route === 'short').length}, feats ${t.feats.length}`);
+    if (s === 1) console.log(`spacing ${spacing}: sizes ${JSON.stringify(t.plats.filter((p) => p.route === 'main' && p.kind !== 'pad').reduce((m, p) => ((m[p.sx] = (m[p.sx] || 0) + 1), m), {}))}, movers ${t.plats.filter((p) => ['mover', 'lift'].includes(p.kind)).length}, birds ${t.feats.filter((f) => f.type === 'bird').length}, spouts ${t.feats.filter((f) => f.type === 'spout').length}, ${t.plats.length} platforms, ${t.gates.length} gates, ${t.checkpoints.length} checkpoints, ropes ${t.plats.filter((p) => p.kind === 'rope').length}, geysers ${t.plats.filter((p) => p.spout).length}, boost pads ${t.plats.filter((p) => p.boost).length}, shortcut platforms ${t.plats.filter((p) => p.route === 'short').length}, feats ${t.feats.length}`);
   }
 }
 console.log(failures ? `FAILED: ${failures} problems` : 'All towers OK');

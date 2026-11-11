@@ -67,7 +67,14 @@ export const BIRD_COLORS = {
   7: ['#8a6a35', '#d4af37', '#5a4a2a'], 8: ['#4b2d6b', '#6d4a8f', '#2b1b40'], 9: ['#2ec27e', '#ff4d6d', '#3a86ff'], 10: ['#b0b8c8', '#e0e6f0', '#7c84a0'],
 };
 const BIRDS_PER_SEGMENT = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 2, 6: 2, 7: 2, 8: 2, 10: 1 };
-const SPOUT_CHANCE = { 1: 0.12, 2: 0.12, 3: 0.24, 4: 0.1, 5: 0.12, 6: 0.14, 7: 0.16, 8: 0.16, 9: 0.1 };
+// Geysers (water spouts) that boost players up, and permanent boost pads, per zone: chance per eligible platform.
+const SPOUT_CHANCE = { 1: 0.2, 2: 0.2, 3: 0.34, 4: 0.2, 5: 0.2, 6: 0.22, 7: 0.24, 8: 0.24, 9: 0.2 }; // none in space
+const BOOST_CHANCE = { 1: 0.16, 2: 0.18, 3: 0.16, 4: 0.18, 5: 0.18, 6: 0.2, 7: 0.2, 8: 0.2, 9: 0.2, 10: 0.32 };
+export const BOOST_R = 0.95;     // radius of a boost pad / geyser trigger
+// Tightropes: runs of 2-3 super slim beams on the main route. Chance per segment (one per zone is guaranteed).
+const ROPE_CHANCE = 0.5;
+export const ROPE_H = 0.4;
+export const ropeWidth = (zone) => 0.92 - zone * 0.022; // 0.9 wide in zone 1 down to 0.7 in zone 10
 
 export function zoneAt(y) {
   return Math.min(10, Math.max(1, Math.floor(y / ZONE_H) + 1));
@@ -134,6 +141,8 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
 
   let prev = { x: spawn0.x, z: spawn0.z, hx: 0.6, hz: 0.6 };
   let floorTop = 0;
+  const ropeZones = new Set();
+  const boostZones = new Set();
   const gateYs = [];
   for (let g = gateSpacing; g <= finishY; g += gateSpacing) gateYs.push(g);
 
@@ -148,6 +157,20 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
     const H = padTop - floorTop;
     const n = Math.max(1, Math.ceil(H / maxStep));
 
+    // Tightrope run for this segment (indices into the route; never the first platform or the pad)
+    const ropeAt = new Set();
+    const lastInZone = G >= finishY || zoneAt(G + gateSpacing - 1) !== zone;
+    if (n >= 4 && (gi > 0 || lastInZone) && (rand() < ROPE_CHANCE || (lastInZone && !ropeZones.has(zone)))) {
+      const len = Math.min(rand() < 0.5 ? 2 : 3, n - 3);
+      const lo = gi === 0 ? 4 : n >= 7 ? 2 : 1;
+      const hi = (n >= 7 ? n - 2 : n - 1) - len;
+      if (hi >= lo) {
+        const s0 = lo + Math.floor(rand() * (hi - lo + 1));
+        for (let q = 0; q < len; q++) ropeAt.add(s0 + q);
+        ropeZones.add(zone);
+      }
+    }
+
     for (let i = 0; i < n; i++) {
       const k = n - i;
       const rem = padTop - y;
@@ -160,7 +183,9 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
       }
       y += dy;
       let kind = 'normal';
+      let rope = !last && ropeAt.has(i);
       if (last) kind = 'pad';
+      else if (rope) kind = 'rope';
       else if (i > 0) kind = pickKind(KIND_TABLE[zone], rand());
       let size = last ? PAD_SIZE : pickSize(SIZE_MIX[zone], rand());
       if (kind === 'barrel') size = Math.max(size, 5);
@@ -172,13 +197,38 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
       const target = R(0.7, Z.gap * 0.85);
       let da = 0.08;
       let cand;
-      for (let it = 0; it < 800; it++) {
-        cand = { x: Math.cos(ang + da) * r, z: Math.sin(ang + da) * r, hx: half, hz: half };
-        if (edgeGap(prev, cand) >= target) break;
-        da += 0.01;
+      if (rope) {
+        // a long, super slim beam laid roughly along the direction of travel (axis-aligned)
+        const L = R(5, 6.5);
+        const W = ropeWidth(zone);
+        const rr0 = SPIRE_R + 0.8 + L * 0.38 + R(0, 1.0);
+        const ok = (c) => { const g = edgeGap(prev, c); return g >= target && g <= Z.gap - 0.05 && originDist(c) >= SPIRE_R + 0.6; };
+        let found = null;
+        for (const dr of [0, 0.7, -0.7, 1.4, -1.4, 2.1, -2.1]) {
+          for (let d2 = 0.02; d2 < 8 && !found; d2 += 0.01) {
+            const a = ang + d2;
+            const alongX = Math.abs(Math.sin(a)) > Math.abs(Math.cos(a));
+            const c = { x: Math.cos(a) * (rr0 + dr), z: Math.sin(a) * (rr0 + dr), hx: alongX ? L / 2 : W / 2, hz: alongX ? W / 2 : L / 2 };
+            if (ok(c)) { found = c; da = d2; }
+            else if (edgeGap(prev, c) > Z.gap + 1.5) break; // moving further round only widens the gap
+          }
+          if (found) break;
+        }
+        if (found) cand = found;
+        else rope = false; // no room for a rope here: fall back to an ordinary platform
+      }
+      if (!rope) {
+        da = 0.08;
+        for (let it = 0; it < 800; it++) {
+          cand = { x: Math.cos(ang + da) * r, z: Math.sin(ang + da) * r, hx: half, hz: half };
+          if (edgeGap(prev, cand) >= target) break;
+          da += 0.01;
+        }
       }
       ang += da;
-      const p = add(box(cand.x, cand.z, size, y, { kind, zone, seg: gi, ang, route: 'main' }));
+      if (!rope && kind === 'rope') kind = 'normal';
+      const dims = rope ? { sx: cand.hx * 2, sz: cand.hz * 2, hx: cand.hx, hz: cand.hz, h: ROPE_H } : null;
+      const p = add(box(cand.x, cand.z, size, y, { kind, zone, seg: gi, ang, route: 'main', ...dims }));
       if (kind === 'gear') { p.shape = 'cyl'; p.r = half; }
       if (last) p.gate = gi;
       route.push(p);
@@ -199,18 +249,27 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
       if (p.kind === 'lift') p.amp = 0.9;
     });
 
-    // Water spouts on some static platforms (telegraphed, then they push players off)
-    if (SPOUT_CHANCE[zone]) {
-      route.forEach((p, i) => {
-        if (i === 0 || p.kind !== 'normal' || p.sx < 3.5) return;
-        if (rand() >= SPOUT_CHANCE[zone]) return;
-        p.spout = { ox: R(-1, 1) * (p.hx - 1), oz: R(-1, 1) * (p.hz - 1) };
-        feats.push({ type: 'spout', plat: p.id, zone, ph: rand() * 10 });
-      });
+    // Geysers (water spouts): telegraphed, then they erupt and boost players up towards later platforms.
+    // Boost pads: a permanent zone-themed launch pad on a platform. Neither goes on ropes or moving platforms.
+    const eligible = [];
+    route.forEach((p, i) => {
+      if (i === 0 || p.kind !== 'normal' || Math.min(p.sx, p.sz) < (zone === 10 ? 2.5 : 3.5)) return;
+      const h = boostHeight(route, i, G, zone);
+      if (h == null) return;
+      eligible.push({ p, h });
+      if (SPOUT_CHANCE[zone] && p.sx >= 3.5 && p.sz >= 3.5 && rand() < SPOUT_CHANCE[zone]) placeBoost(p, h, 'spout');
+      else if (rand() < BOOST_CHANCE[zone]) placeBoost(p, h, 'boost');
+    });
+    // every zone gets at least one boost, and most segments get one
+    if (eligible.length && !eligible.some((e) => e.p.spout || e.p.boost) && ((lastInZone && !boostZones.has(zone)) || rand() < 0.6)) {
+      const e = eligible[Math.floor(rand() * eligible.length)];
+      placeBoost(e.p, e.h, SPOUT_CHANCE[zone] && e.p.sx >= 3.5 && e.p.sz >= 3.5 && rand() < 0.5 ? 'spout' : 'boost');
     }
 
-    // Shortcut spur: steeper, smaller jumps around the outside that rejoin the route a loop higher.
-    if (rand() < 0.85) trySpur(route, zone, padTop);
+    // Shortcut spurs: steeper, smaller jumps around the outside that rejoin the route a loop higher.
+    // Most segments get one, and some get a second one starting elsewhere.
+    if (rand() < 0.9) trySpur(route, zone, padTop);
+    if (rand() < 0.55) for (let attempt = 0; attempt < 4; attempt++) if (trySpur(route, zone, padTop)) break;
 
     const pad = route[route.length - 1];
     const gate = {
@@ -300,21 +359,37 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
   return { seed, gateSpacing, finishY, plats, gates, checkpoints, feats };
 
   // ---- helpers that need closure state ----
+  function placeBoost(p, h, type) {
+    const spread = (hh) => R(-1, 1) * Math.max(0, hh - BOOST_R - 0.1);
+    const spot = { ox: spread(p.hx), oz: spread(p.hz), h };
+    if (type === 'spout') {
+      p.spout = spot;
+      feats.push({ type: 'spout', plat: p.id, zone: p.zone, ph: rand() * 10 });
+    } else {
+      p.boost = spot;
+      feats.push({ type: 'boost', plat: p.id, zone: p.zone });
+    }
+    boostZones.add(p.zone);
+  }
+
   function trySpur(route, zone, padTop) {
     const Z = ZONES[zone - 1];
-    if (route.length < 8) return;
-    const k = Math.floor(R(0, route.length - 8));
+    const minLen = zone === 10 ? 5 : 8;
+    if (route.length < minLen) return false;
+    const k = Math.floor(R(0, route.length - minLen + 1));
     const start = route[k];
     const dyS = Math.min(Z.step + 1.0, zone === 10 ? 8 : 3.6) * 0.9;
     const gapS = Math.min(Z.gap * 0.85 + 0.4, zone === 10 ? 6 : 3.4);
-    const rS = TOWER_R - 0.6 - 1.5 * 1.42;
+    // hug the route: just outside its outermost platform edge so small platforms can still be reached from the spur
+    const outer = Math.max(...route.map((q) => Math.hypot(Math.abs(q.x) + q.hx, Math.abs(q.z) + q.hz)));
+    const rS = Math.min(TOWER_R - 0.6 - 1.5 * 1.42, outer + 1.5 * 1.1 + R(0.6, 1.4));
     let prevS = start;
     let a = Math.atan2(start.z, start.x);
     let y = start.top;
     const spur = [];
     for (let m = 0; m < 14; m++) {
       y += dyS;
-      if (y > padTop - 1) return;
+      if (y > padTop - 1) return false;
       const target = gapS * R(0.6, 0.95);
       let da = 0.05;
       let cand;
@@ -335,17 +410,37 @@ export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
       }
       for (const q of plats) {
         if (q === prevS || q === join || q.noSide) continue;
-        if (Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4 + (q.amp || 0)) return;
+        if (Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4 + (q.amp || 0)) return false;
       }
-      for (const q of spur) if (q !== prevS && Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4) return;
+      for (const q of spur) if (q !== prevS && Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4) return false;
       spur.push(cand);
       prevS = cand;
       if (join && m >= 1) {
         for (const c of spur) add(box(c.x, c.z, 3, c.top, { kind: 'normal', zone, seg: start.seg, route: 'short', ang: Math.atan2(c.z, c.x) }));
-        return;
+        return true;
       }
     }
+    return false;
   }
+}
+
+// Distance from the tower axis to the nearest point of a rectangle
+function originDist(c) {
+  return Math.hypot(Math.max(0, Math.abs(c.x) - c.hx), Math.max(0, Math.abs(c.z) - c.hz));
+}
+
+// How high (blocks above the platform) a geyser or boost pad on route[i] should launch: enough to
+// clear the platform two or three steps further up, but never into the gate ceiling. null = no good target.
+function boostHeight(route, i, G, zone) {
+  const p = route[i];
+  const room = G - CEIL_TOP - CEIL_H - PHYS.height - 0.3 - p.top;
+  for (const j of [i + 3, i + 2]) {
+    const q = route[j];
+    if (!q) continue;
+    const need = q.top - p.top + 1.7;
+    if (need >= 4.5 && need <= Math.min(room, zone === 10 ? 14 : 11.5)) return Math.round(need * 4) / 4;
+  }
+  return null;
 }
 
 function pickSize(mix, r) {

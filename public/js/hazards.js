@@ -1,7 +1,7 @@
 // Hazards and enemies. Every schedule is a pure function of game time + tower seed,
 // so all clients see the same warnings and strikes. Each client only applies pushes to its own player.
 import * as THREE from 'three';
-import { hash01, zoneAt, SPIRE_R, BIRD_COLORS } from './shared/tower.js';
+import { hash01, zoneAt, SPIRE_R, BIRD_COLORS, BOOST_R } from './shared/tower.js';
 import { HAZARD_LEVELS } from './shared/settings.js';
 import { toon, emojiSprite } from './animals.js';
 import { audio } from './audio.js';
@@ -212,6 +212,10 @@ export class Hazards {
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.05;
     ring.visible = false;
+    // a bobbing up-arrow shows that this geyser lifts you
+    const arrow = emojiSprite('⬆️', 0.7);
+    arrow.position.y = 1.5;
+    g.add(arrow);
     const drops = [];
     for (let i = 0; i < 6; i++) {
       const d = new THREE.Mesh(this.sphere, water);
@@ -222,7 +226,7 @@ export class Hazards {
     }
     g.add(nozzle, column, cap, ring);
     this.world.zoneGroups[f.zone].add(g);
-    return { f, p, pos, g, column, cap, ring, drops, hitSlot: -1, warned: -1 };
+    return { f, p, pos, g, column, cap, ring, arrow, drops, hitSlot: -1, warned: -1 };
   }
 
   updateSwoopers(t, dt, player, fz, safe) {
@@ -288,7 +292,9 @@ export class Hazards {
       const erupting = ph >= 3.8 && ph < 4.8;
       let h = 0.2 + Math.sin(t * 6 + sp.f.ph) * 0.05;
       if (warning) h = 0.35 + Math.abs(Math.sin(ph * 14)) * 0.25;
-      if (erupting) h = Math.min(6, (ph - 3.8) * 40) * (ph > 4.5 ? (4.8 - ph) / 0.3 : 1);
+      if (erupting) h = Math.min(Math.min(9, sp.p.spout.h), (ph - 3.8) * 40) * (ph > 4.5 ? (4.8 - ph) / 0.3 : 1);
+      sp.arrow.position.y = 1.5 + Math.sin(t * 4 + sp.f.ph) * 0.18 + (erupting ? h * 0.5 : 0);
+      sp.arrow.material.opacity = erupting ? 0.4 : 1;
       sp.column.scale.y = Math.max(0.05, h);
       sp.column.position.y = sp.column.scale.y / 2;
       sp.cap.position.y = sp.column.scale.y;
@@ -309,12 +315,11 @@ export class Hazards {
       if (!P) continue;
       const dist = Math.hypot(P.x - sp.pos.x, P.z - sp.pos.z);
       if (warning && sp.warned !== slot && dist < 8 && Math.abs(P.y - sp.pos.y) < 4) { sp.warned = slot; audio.play('gurgle'); }
-      if (erupting && !safe && sp.hitSlot !== slot && dist < 1.1 && P.y > sp.pos.y - 0.3 && P.y < sp.pos.y + h) {
+      // the eruption lifts anyone standing in it (a boost, not a push)
+      if (erupting && sp.hitSlot !== slot && dist < BOOST_R + 0.15 && P.y > sp.pos.y - 0.3 && P.y < sp.pos.y + Math.max(h, 1.5) && player.canBoost()) {
         sp.hitSlot = slot;
         audio.play('geyser');
-        let dx = P.x - sp.pos.x, dz = P.z - sp.pos.z;
-        if (Math.hypot(dx, dz) < 0.2) { dx = sp.pos.x; dz = sp.pos.z; } // dead centre: push outward from the tower
-        player.hazardPush(dx, dz, 3.5 * this.level.push, 11, 0);
+        player.boost(sp.p.spout.h);
       }
     }
   }
@@ -447,7 +452,7 @@ export class Hazards {
       }
     }
 
-    // ---- swooping birds (every zone; parrots in zone 9) and water spouts
+    // ---- swooping birds (every zone; parrots in zone 9) and geysers (boost-ups)
     this.updateSwoopers(t, dt, player, fz, safe);
     this.updateSpouts(t, dt, player, fz, safe);
 

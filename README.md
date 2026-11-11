@@ -32,7 +32,12 @@ The mouse is optional: drag to look around, scroll to zoom.
 
 - Platforms come in four sizes (tiny, small, medium, normal) from zone 1, with more small and tiny ones higher up.
 - Moving platforms start in zone 1 (sliders and lifts) and every zone adds its own (leaf lifts, crumbling ledges, ice, fading clouds, balloons, gears, airships, …).
-- Telegraphed hazards in every zone: **swooping birds** (red outline, ❗ and a red target ring for over a second before they dive) and **water spouts** (bubbling with a pulsing blue ring before they erupt and push you off). Zones 8–10 add wind, lightning, Gust Puffs, parrots, barrels, booms, asteroids, meteors and low gravity. The Hazard level setting (Gentle / Standard / Wild) scales how often they fire.
+- **Tightropes**: every zone has an occasional run of 2–3 super slim beams (down to 0.7 blocks wide in space) on the main route. Keep your balance!
+- **Boost-ups** skip several platforms at once, and every zone has some:
+  - **Geysers** (the old water spouts) bubble with a pulsing blue ring and a ⬆️ arrow, then erupt and launch you straight up. Stand in the column to ride it.
+  - **Boost pads** are permanent glowing discs with a zone icon (🌼 🍄 🐸 ❄️ 🌈 🎈 ⚙️ ⚡ ⚓ 🚀). Step on one to fling yourself up; you keep your double jump at the top.
+- **Shortcuts**: yellow-topped side trails of small platforms wind around the outside and rejoin the route a loop higher. Most segments have one, some have two.
+- Telegraphed hazards in every zone: **swooping birds** (red outline, ❗ and a red target ring for over a second before they dive). Zones 8–10 add wind, lightning, Gust Puffs, parrots, barrels, booms, asteroids, meteors and low gravity. The Hazard level setting (Gentle / Standard / Wild) scales how often they fire.
 
 ## Deploy to Render
 

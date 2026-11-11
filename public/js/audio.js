@@ -197,6 +197,7 @@ class Audio {
       case 'fall': this.tone(600, t, 0.8, 'sine', 0.15, null, 120); break;
       case 'bubble': this.tone(400, t, 0.15, 'sine', 0.2, null, 900); break;
       case 'squawk': this.tone(1400, t, 0.12, 'sawtooth', 0.08, null, 900); this.tone(1500, t + 0.15, 0.14, 'sawtooth', 0.08, null, 800); break;
+      case 'boost': this.tone(240, t, 0.5, 'triangle', 0.3, null, 1500); this.tone(480, t + 0.05, 0.4, 'sine', 0.18, null, 1900); this.whoosh(t, 0.35, 0.18); break;
       case 'gurgle': [0, 0.12, 0.24, 0.36].forEach((d, i) => this.tone(220 + i * 60, t + d, 0.1, 'sine', 0.15, null, 500 + i * 80)); break;
       case 'geyser': this.whoosh(t, 0.8, 0.4); this.tone(120, t, 0.5, 'sine', 0.2, null, 300); break;
       default: break;
