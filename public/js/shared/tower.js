@@ -1,8 +1,8 @@
 // Deterministic tower generator, shared by the server (gate checks) and every client (rendering + physics).
 // Same seed + same settings => the same tower for everyone in a room.
 
-export const BLOCKS = 800;
-export const ZONE_H = 80;
+export const BLOCKS = 600;
+export const ZONE_H = 60;      // 10 zones of 60 blocks; a gate every 30 by default
 export const TOWER_R = 16;     // route platforms stay inside this radius
 export const DECK_R = 18.5;    // checkpoint decks and gate ceilings cover the whole tower
 export const OFF_R = 18.8;     // beyond this the player has jumped off the tower
@@ -30,18 +30,44 @@ export const ZONES = [
 ];
 
 // Platform kinds per zone with their chance of appearing on the main route.
+// 'mover' slides back and forth, 'lift' rises and falls: there is movement from zone 1 onward.
 const KIND_TABLE = {
-  1: [['bounce', 0.15]],
-  2: [['leaf', 0.22]],
-  3: [['crumble', 0.28]],
-  4: [['ice', 0.4], ['slide', 0.15]],
-  5: [['bouncy', 0.2], ['fade', 0.2]],
-  6: [['drift', 0.25], ['sink', 0.2]],
-  7: [['gear', 0.2], ['conveyor', 0.15], ['piston', 0.15]],
-  8: [],
+  1: [['bounce', 0.1], ['mover', 0.2], ['lift', 0.12]],
+  2: [['leaf', 0.2], ['mover', 0.16], ['lift', 0.06]],
+  3: [['crumble', 0.24], ['mover', 0.12], ['lift', 0.06]],
+  4: [['ice', 0.32], ['slide', 0.15], ['lift', 0.08]],
+  5: [['bouncy', 0.18], ['fade', 0.2], ['mover', 0.1]],
+  6: [['drift', 0.25], ['sink', 0.2], ['lift', 0.08]],
+  7: [['gear', 0.2], ['conveyor', 0.15], ['piston', 0.15], ['mover', 0.08]],
+  8: [['mover', 0.16], ['lift', 0.12]],
   9: [['airship', 0.25], ['barrel', 0.15], ['boom', 0.12]],
-  10: [['jelly', 0.12]],
+  10: [['jelly', 0.12], ['mover', 0.12]],
 };
+
+// Platform size classes and how often each appears per zone: [normal, medium, small, tiny]
+export const SIZES = { normal: 6.5, medium: 5, small: 3.5, tiny: 2.5 };
+const SIZE_MIX = {
+  1: [0.4, 0.32, 0.2, 0.08],
+  2: [0.32, 0.33, 0.25, 0.1],
+  3: [0.25, 0.33, 0.28, 0.14],
+  4: [0.25, 0.33, 0.28, 0.14],
+  5: [0.18, 0.32, 0.32, 0.18],
+  6: [0.15, 0.3, 0.33, 0.22],
+  7: [0.15, 0.3, 0.33, 0.22],
+  8: [0.1, 0.28, 0.36, 0.26],
+  9: [0.1, 0.28, 0.36, 0.26],
+  10: [0.08, 0.25, 0.37, 0.3],
+};
+const SIZE_LIST = [SIZES.normal, SIZES.medium, SIZES.small, SIZES.tiny];
+const HORIZONTAL_MOVERS = new Set(['mover', 'slide', 'airship', 'drift']);
+// Swooping birds per zone (zone 9 has its own parrots): body, head, wing colours
+export const BIRD_COLORS = {
+  1: ['#4ea8ff', '#4ea8ff', '#ffd23d'], 2: ['#e05d3a', '#e05d3a', '#7a4a2a'], 3: ['#ffffff', '#ffffff', '#9aa7b4'],
+  4: ['#2f3640', '#ffffff', '#2f3640'], 5: ['#ff8fc8', '#ffd6ec', '#b28dff'], 6: ['#ffd23d', '#ff9f1c', '#ff6b6b'],
+  7: ['#8a6a35', '#d4af37', '#5a4a2a'], 8: ['#4b2d6b', '#6d4a8f', '#2b1b40'], 9: ['#2ec27e', '#ff4d6d', '#3a86ff'], 10: ['#b0b8c8', '#e0e6f0', '#7c84a0'],
+};
+const BIRDS_PER_SEGMENT = { 1: 1, 2: 1, 3: 1, 4: 1, 5: 2, 6: 2, 7: 2, 8: 2, 10: 1 };
+const SPOUT_CHANCE = { 1: 0.12, 2: 0.12, 3: 0.24, 4: 0.1, 5: 0.12, 6: 0.14, 7: 0.16, 8: 0.16, 9: 0.1 };
 
 export function zoneAt(y) {
   return Math.min(10, Math.max(1, Math.floor(y / ZONE_H) + 1));
@@ -84,7 +110,7 @@ export function finishYFor(finishZone) {
  * Build the tower.
  * @returns {{plats:any[], gates:any[], checkpoints:any[], feats:any[], finishY:number, gateSpacing:number}}
  */
-export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
+export function buildTower(seed, { gateSpacing = 30, finishY = BLOCKS } = {}) {
   const rand = mulberry32(seed >>> 0);
   const R = (a, b) => a + (b - a) * rand();
   const snap = (v) => Math.round(v * 2) / 2;
@@ -136,9 +162,10 @@ export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
       let kind = 'normal';
       if (last) kind = 'pad';
       else if (i > 0) kind = pickKind(KIND_TABLE[zone], rand());
-      let size = last ? PAD_SIZE : snap(R(Z.min, Z.max));
+      let size = last ? PAD_SIZE : pickSize(SIZE_MIX[zone], rand());
       if (kind === 'barrel') size = Math.max(size, 5);
-      if (kind === 'boom') size = Math.max(size, 4.5);
+      if (kind === 'boom') size = Math.max(size, 5);
+      if (kind === 'jelly') size = Math.max(size, 3.5);
       const half = size / 2;
       const rmin = SPIRE_R + 0.8 + half * 1.42;
       const r = rmin + R(0, 1.2);
@@ -158,8 +185,32 @@ export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
       prev = p;
     }
 
+    // How far moving platforms may travel without bumping into their neighbours
+    route.forEach((p, i) => {
+      if (HORIZONTAL_MOVERS.has(p.kind)) {
+        // a gap shared with another moving platform is split between the two
+        const room = (q) => {
+          if (!q) return 3;
+          const g = edgeGap(p, q) - 0.35;
+          return HORIZONTAL_MOVERS.has(q.kind) ? g / 2 : g;
+        };
+        p.amp = Math.max(0.3, Math.min(1.6, room(route[i - 1]), room(route[i + 1])));
+      }
+      if (p.kind === 'lift') p.amp = 0.9;
+    });
+
+    // Water spouts on some static platforms (telegraphed, then they push players off)
+    if (SPOUT_CHANCE[zone]) {
+      route.forEach((p, i) => {
+        if (i === 0 || p.kind !== 'normal' || p.sx < 3.5) return;
+        if (rand() >= SPOUT_CHANCE[zone]) return;
+        p.spout = { ox: R(-1, 1) * (p.hx - 1), oz: R(-1, 1) * (p.hz - 1) };
+        feats.push({ type: 'spout', plat: p.id, zone, ph: rand() * 10 });
+      });
+    }
+
     // Shortcut spur: steeper, smaller jumps around the outside that rejoin the route a loop higher.
-    if (zone >= 3 && rand() < 0.85) trySpur(route, zone, padTop);
+    if (rand() < 0.85) trySpur(route, zone, padTop);
 
     const pad = route[route.length - 1];
     const gate = {
@@ -212,13 +263,22 @@ export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
     if (zone === 8) {
       mid.forEach((p, i) => { if (i % 4 === 2) feats.push({ type: 'puff', plat: p.id, ang: Math.atan2(p.z, p.x), y: p.top + 0.7, ph: rand() * 10 }); });
     }
+    if (BIRDS_PER_SEGMENT[zone]) {
+      for (let b = 0; b < BIRDS_PER_SEGMENT[zone] && mid.length > 2; b++) {
+        const p = mid[Math.floor(((b + 0.5) / BIRDS_PER_SEGMENT[zone]) * mid.length)];
+        const pa = Math.atan2(p.z, p.x) - 0.4;
+        const perch = { x: Math.cos(pa) * (SPIRE_R + 0.6), z: Math.sin(pa) * (SPIRE_R + 0.6), y: p.top + 3 };
+        const targets = route.filter((q) => q.kind !== 'pad' && q.shape === 'box' && Math.abs(q.top - perch.y) < 6 && Math.hypot(q.x - perch.x, q.z - perch.z) < 10).map((q) => q.id);
+        if (targets.length) feats.push({ type: 'bird', zone, perch, targets, ph: rand() * 10 });
+      }
+    }
     if (zone === 9) {
       mid.forEach((p, i) => {
         if (i % 3 === 1) {
           const pa = Math.atan2(p.z, p.x) + 0.35;
           const perch = { x: Math.cos(pa) * (SPIRE_R + 0.6), z: Math.sin(pa) * (SPIRE_R + 0.6), y: p.top + 3 };
           const targets = plats.filter((q) => q.zone === 9 && q.shape === 'box' && Math.abs(q.top - perch.y) < 6 && Math.hypot(q.x - perch.x, q.z - perch.z) < 8).map((q) => q.id);
-          if (targets.length) feats.push({ type: 'parrot', perch, targets, ph: rand() * 10 });
+          if (targets.length) feats.push({ type: 'parrot', zone: 9, perch, targets, ph: rand() * 10 });
         }
       });
     }
@@ -270,11 +330,12 @@ export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
         const q = route[j];
         const dyq = q.top - y;
         const g = edgeGap(cand, q);
-        if (dyq >= -1.5 && dyq <= dyS && g <= gapS && g >= 0.25) { join = q; break; }
+        const travel = q.kind === 'lift' ? 0 : q.amp || 0;
+        if (dyq >= -1.5 && dyq <= dyS && g <= gapS && g >= 0.25 + travel) { join = q; break; }
       }
       for (const q of plats) {
         if (q === prevS || q === join || q.noSide) continue;
-        if (Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4) return;
+        if (Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4 + (q.amp || 0)) return;
       }
       for (const q of spur) if (q !== prevS && Math.abs(q.top - y) < 2.8 && edgeGap(cand, q) < 0.4) return;
       spur.push(cand);
@@ -285,6 +346,14 @@ export function buildTower(seed, { gateSpacing = 40, finishY = 800 } = {}) {
       }
     }
   }
+}
+
+function pickSize(mix, r) {
+  for (let i = 0; i < mix.length; i++) {
+    if (r < mix[i]) return SIZE_LIST[i];
+    r -= mix[i];
+  }
+  return SIZES.medium;
 }
 
 function pickKind(table, r) {
@@ -304,17 +373,24 @@ function polar(r, a) {
 export function platformMotion(p, t) {
   switch (p.kind) {
     case 'leaf': return { dx: 0, dy: 0.9 * Math.sin((t / 6) * Math.PI * 2 + p.ph), dz: 0, rot: 0, solid: true };
+    case 'lift': return { dx: 0, dy: (p.amp || 0.9) * Math.sin((t / 5) * Math.PI * 2 + p.ph), dz: 0, rot: 0, solid: true };
+    case 'mover': {
+      const o = (p.amp || 1.2) * Math.sin((t / 4.5) * Math.PI * 2 + p.ph);
+      const a = Math.atan2(p.z, p.x);
+      return { dx: -Math.sin(a) * o, dy: 0, dz: Math.cos(a) * o, rot: 0, solid: true };
+    }
     case 'slide': {
-      const o = 1.5 * Math.sin((t / 5) * Math.PI * 2 + p.ph);
+      const o = (p.amp || 1.5) * Math.sin((t / 5) * Math.PI * 2 + p.ph);
       const a = Math.atan2(p.z, p.x);
       return { dx: -Math.sin(a) * o, dy: 0, dz: Math.cos(a) * o, rot: 0, solid: true };
     }
     case 'drift': {
       const w = (t / 8) * Math.PI * 2 * p.dir + p.ph;
-      return { dx: Math.cos(w) * 1.1, dy: 0, dz: Math.sin(w) * 1.1, rot: 0, solid: true };
+      const r = Math.min(1.1, p.amp || 1.1);
+      return { dx: Math.cos(w) * r, dy: 0, dz: Math.sin(w) * r, rot: 0, solid: true };
     }
     case 'airship': {
-      const o = 1.8 * Math.sin((t / 7) * Math.PI * 2 + p.ph);
+      const o = (p.amp || 1.6) * Math.sin((t / 7) * Math.PI * 2 + p.ph);
       const a = Math.atan2(p.z, p.x);
       return { dx: -Math.sin(a) * o, dy: 0.25 * Math.sin(t * 1.3 + p.ph), dz: Math.cos(a) * o, rot: 0, solid: true };
     }

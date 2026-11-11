@@ -1,9 +1,9 @@
 // Hazards and enemies. Every schedule is a pure function of game time + tower seed,
 // so all clients see the same warnings and strikes. Each client only applies pushes to its own player.
 import * as THREE from 'three';
-import { hash01, zoneAt, SPIRE_R } from './shared/tower.js';
+import { hash01, zoneAt, SPIRE_R, BIRD_COLORS } from './shared/tower.js';
 import { HAZARD_LEVELS } from './shared/settings.js';
-import { toon } from './animals.js';
+import { toon, emojiSprite } from './animals.js';
 import { audio } from './audio.js';
 
 const TAU = Math.PI * 2;
@@ -37,6 +37,7 @@ export class Hazards {
     const tw = this.tower;
     this.puffs = [];
     this.parrots = [];
+    this.spouts = [];
     this.asteroids = [];
     for (const f of tw.feats) {
       if (f.type === 'puff') {
@@ -64,38 +65,8 @@ export class Hazards {
         this.world.zoneGroups[8].add(g);
         this.puffs.push({ f, g, cheeks, cone, pos, dir: new THREE.Vector2(Math.cos(f.ang), Math.sin(f.ang)), hitSlot: -1 });
       }
-      if (f.type === 'parrot') {
-        const g = new THREE.Group();
-        const body = new THREE.Mesh(this.sphere, toon('#2ec27e'));
-        body.scale.set(0.3, 0.38, 0.3);
-        const head = new THREE.Mesh(this.sphere, toon('#ff4d6d'));
-        head.scale.setScalar(0.22);
-        head.position.set(0, 0.35, 0.1);
-        const beak = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 6), toon('#ffd23d'));
-        beak.rotation.x = Math.PI / 2;
-        beak.position.set(0, 0.32, 0.32);
-        const wings = [];
-        for (const s of [-1, 1]) {
-          const w = new THREE.Mesh(this.sphere, toon('#3a86ff'));
-          w.scale.set(0.42, 0.06, 0.2);
-          w.position.set(s * 0.35, 0.05, 0);
-          g.add(w);
-          wings.push(w);
-        }
-        for (const s of [-1, 1]) {
-          const e = new THREE.Mesh(this.sphere, toon('#ffffff'));
-          e.scale.setScalar(0.07);
-          e.position.set(s * 0.1, 0.4, 0.27);
-          g.add(e);
-        }
-        const outline = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: '#ff2d55', side: THREE.BackSide, transparent: true, opacity: 0.8 }));
-        outline.scale.set(0.42, 0.55, 0.42);
-        outline.visible = false;
-        g.add(body, head, beak, outline);
-        g.position.set(f.perch.x, f.perch.y, f.perch.z);
-        this.world.zoneGroups[9].add(g);
-        this.parrots.push({ f, g, wings, outline, hitSlot: -1, warned: -1 });
-      }
+      if (f.type === 'parrot' || f.type === 'bird') this.parrots.push(this.makeSwooper(f));
+      if (f.type === 'spout') this.spouts.push(this.makeSpout(f));
       if (f.type === 'asteroid') {
         const m = new THREE.Mesh(new THREE.DodecahedronGeometry(f.size, 0), toon('#8d7f72'));
         this.world.zoneGroups[10].add(m);
@@ -177,6 +148,175 @@ export class Hazards {
       this.streaks.push(s);
     }
     this.streakMat = sm;
+  }
+
+  makeSwooper(f) {
+    const [cb, ch, cw] = BIRD_COLORS[f.zone] || BIRD_COLORS[1];
+    const parrot = f.type === 'parrot';
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(this.sphere, toon(cb));
+    body.scale.set(0.3, 0.34, 0.38);
+    const head = new THREE.Mesh(this.sphere, toon(ch));
+    head.scale.setScalar(0.22);
+    head.position.set(0, 0.3, 0.22);
+    const beak = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.2, 6), toon('#ffb703'));
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0.27, 0.46);
+    const wings = [];
+    for (const sd of [-1, 1]) {
+      const w = new THREE.Mesh(this.sphere, toon(cw));
+      w.scale.set(0.45, 0.06, 0.22);
+      w.position.set(sd * 0.36, 0.06, 0);
+      g.add(w);
+      wings.push(w);
+      const e = new THREE.Mesh(this.sphere, toon('#ffffff'));
+      e.scale.setScalar(0.07);
+      e.position.set(sd * 0.1, 0.36, 0.38);
+      const pu = new THREE.Mesh(this.sphere, toon('#1b1b1b'));
+      pu.scale.setScalar(0.035);
+      pu.position.set(sd * 0.1, 0.36, 0.44);
+      g.add(e, pu);
+    }
+    const outline = new THREE.Mesh(this.sphere, new THREE.MeshBasicMaterial({ color: '#ff2d55', side: THREE.BackSide, transparent: true, opacity: 0.85 }));
+    outline.scale.set(0.46, 0.6, 0.55);
+    outline.visible = false;
+    g.add(body, head, beak, outline);
+    g.position.set(f.perch.x, f.perch.y, f.perch.z);
+    const zg = this.world.zoneGroups[f.zone];
+    zg.add(g);
+    // telegraph: "!" over the bird and a red ring where it will land its dive
+    const alert = emojiSprite('❗', 0.8);
+    alert.visible = false;
+    zg.add(alert);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.35, 32), new THREE.MeshBasicMaterial({ color: '#ff2d55', transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    zg.add(ring);
+    return { f, g, wings, outline, alert, ring, parrot, hitSlot: -1, warned: -1 };
+  }
+
+  makeSpout(f) {
+    const p = this.tower.plats[f.plat];
+    const pos = new THREE.Vector3(p.x + p.spout.ox, p.top, p.z + p.spout.oz);
+    const g = new THREE.Group();
+    g.position.copy(pos);
+    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.45, 0.25, 12), toon('#5d7a8c'));
+    nozzle.position.y = 0.12;
+    const water = new THREE.MeshBasicMaterial({ color: '#7fd4ff', transparent: true, opacity: 0.75, depthWrite: false });
+    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.65, 1, 14, 1, true), water);
+    column.position.y = 0.5;
+    column.scale.y = 0.2;
+    const cap = new THREE.Mesh(this.sphere, water);
+    cap.scale.set(0.7, 0.35, 0.7);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.15, 28), new THREE.MeshBasicMaterial({ color: '#3a86ff', transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.05;
+    ring.visible = false;
+    const drops = [];
+    for (let i = 0; i < 6; i++) {
+      const d = new THREE.Mesh(this.sphere, water);
+      d.scale.setScalar(0.09);
+      d.visible = false;
+      g.add(d);
+      drops.push(d);
+    }
+    g.add(nozzle, column, cap, ring);
+    this.world.zoneGroups[f.zone].add(g);
+    return { f, p, pos, g, column, cap, ring, drops, hitSlot: -1, warned: -1 };
+  }
+
+  updateSwoopers(t, dt, player, fz, safe) {
+    const P = player ? player.pos : null;
+    for (const pr of this.parrots) {
+      if (Math.abs(pr.f.zone - fz) > 1) continue;
+      const W = this.period(pr.parrot ? 7 : 8);
+      const tt = t + pr.f.ph;
+      const slot = Math.floor(tt / W);
+      const ph = ((tt - slot * W) / W) * 8; // 0-3.3 perched, 3.3-4.6 warning, 4.6-5.4 dive, 5.4-7 return
+      const perch = pr.f.perch;
+      const tp = this.tower.plats[pr.f.targets[Math.floor(hash01(this.seed, slot, pr.f.targets.length, pr.f.zone) * pr.f.targets.length)]];
+      const target = new THREE.Vector3(tp.cx ?? tp.x, (tp.ctop ?? tp.top) + 0.6, tp.cz ?? tp.z);
+      const hover = new THREE.Vector3(perch.x, perch.y + 1.2, perch.z);
+      const beyond = target.clone().add(target.clone().sub(hover).setY(0).normalize().multiplyScalar(2.5));
+      let pos;
+      const warning = ph >= 3.3 && ph < 4.6;
+      const diving = ph >= 4.6 && ph < 5.4;
+      pr.outline.visible = warning || diving;
+      pr.alert.visible = warning;
+      pr.ring.visible = warning || diving;
+      if (pr.ring.visible) {
+        pr.ring.position.set(target.x, target.y - 0.55, target.z);
+        const k = warning ? (ph - 3.3) / 1.3 : 1;
+        pr.ring.scale.setScalar(0.6 + k * 0.6);
+        pr.ring.material.opacity = 0.5 + 0.4 * Math.abs(Math.sin(ph * 10));
+      }
+      if (ph < 3.3) pos = new THREE.Vector3(perch.x, perch.y + Math.abs(Math.sin(t * 2 + pr.f.ph)) * 0.05, perch.z);
+      else if (warning) {
+        pos = hover.clone();
+        pos.y += Math.sin(ph * 20) * 0.12;
+        if (pr.warned !== slot && P && P.distanceTo(target) < 14) { pr.warned = slot; audio.play('squawk'); }
+      } else if (diving) {
+        const k = (ph - 4.6) / 0.8;
+        pos = k < 0.75 ? hover.clone().lerp(target, k / 0.75) : target.clone().lerp(beyond, (k - 0.75) / 0.25);
+      } else pos = beyond.clone().lerp(new THREE.Vector3(perch.x, perch.y, perch.z), Math.min(1, (ph - 5.4) / 1.6));
+      pr.g.position.copy(pos);
+      pr.alert.position.set(pos.x, pos.y + 0.9, pos.z);
+      if (diving) pr.g.lookAt(beyond);
+      else if (warning) pr.g.lookAt(target.x, pos.y, target.z);
+      else pr.g.lookAt(pos.x * 3, pos.y, pos.z * 3);
+      const flap = Math.sin(t * (ph >= 3.3 ? 30 : 4)) * 0.6;
+      pr.wings[0].rotation.z = flap;
+      pr.wings[1].rotation.z = -flap;
+      if (P && !safe && diving && pr.hitSlot !== slot && P.distanceTo(new THREE.Vector3(pos.x, pos.y - 0.3, pos.z)) < 1.3) {
+        pr.hitSlot = slot;
+        audio.play('push');
+        const d = beyond.clone().sub(hover);
+        player.hazardPush(d.x, d.z, (pr.parrot ? 4 : 3.5) * this.level.push, 4, 0);
+      }
+    }
+  }
+
+  updateSpouts(t, dt, player, fz, safe) {
+    const P = player ? player.pos : null;
+    for (const sp of this.spouts) {
+      if (Math.abs(sp.f.zone - fz) > 1) continue;
+      const W = this.period(6);
+      const tt = t + sp.f.ph;
+      const slot = Math.floor(tt / W);
+      const ph = ((tt - slot * W) / W) * 6; // 0-2.3 idle, 2.3-3.8 warning, 3.8-4.8 eruption
+      const warning = ph >= 2.3 && ph < 3.8;
+      const erupting = ph >= 3.8 && ph < 4.8;
+      let h = 0.2 + Math.sin(t * 6 + sp.f.ph) * 0.05;
+      if (warning) h = 0.35 + Math.abs(Math.sin(ph * 14)) * 0.25;
+      if (erupting) h = Math.min(6, (ph - 3.8) * 40) * (ph > 4.5 ? (4.8 - ph) / 0.3 : 1);
+      sp.column.scale.y = Math.max(0.05, h);
+      sp.column.position.y = sp.column.scale.y / 2;
+      sp.cap.position.y = sp.column.scale.y;
+      sp.cap.visible = erupting || warning;
+      sp.ring.visible = warning;
+      if (warning) {
+        sp.ring.scale.setScalar(0.8 + ((ph - 2.3) / 1.5) * 0.5);
+        sp.ring.material.color.set(Math.sin(ph * 16) > 0 ? '#3a86ff' : '#ffffff');
+      }
+      sp.drops.forEach((d, i) => {
+        d.visible = warning || erupting;
+        if (!d.visible) return;
+        const a = (i / sp.drops.length) * TAU + t * 2;
+        const up = erupting ? 1 : 0.3;
+        const k = ((t * (erupting ? 2.5 : 1.5) + i / sp.drops.length) % 1);
+        d.position.set(Math.cos(a) * (0.4 + k * (erupting ? 1.4 : 0.4)), sp.column.scale.y * (erupting ? 0.6 : 1) + Math.sin(k * Math.PI) * up, Math.sin(a) * (0.4 + k * (erupting ? 1.4 : 0.4)));
+      });
+      if (!P) continue;
+      const dist = Math.hypot(P.x - sp.pos.x, P.z - sp.pos.z);
+      if (warning && sp.warned !== slot && dist < 8 && Math.abs(P.y - sp.pos.y) < 4) { sp.warned = slot; audio.play('gurgle'); }
+      if (erupting && !safe && sp.hitSlot !== slot && dist < 1.1 && P.y > sp.pos.y - 0.3 && P.y < sp.pos.y + h) {
+        sp.hitSlot = slot;
+        audio.play('geyser');
+        let dx = P.x - sp.pos.x, dz = P.z - sp.pos.z;
+        if (Math.hypot(dx, dz) < 0.2) { dx = sp.pos.x; dz = sp.pos.z; } // dead centre: push outward from the tower
+        player.hazardPush(dx, dz, 3.5 * this.level.push, 11, 0);
+      }
+    }
   }
 
   canHit(key, cd = 1) {
@@ -307,40 +447,12 @@ export class Hazards {
       }
     }
 
-    // ---- zone 9: parrots, barrels, booms
+    // ---- swooping birds (every zone; parrots in zone 9) and water spouts
+    this.updateSwoopers(t, dt, player, fz, safe);
+    this.updateSpouts(t, dt, player, fz, safe);
+
+    // ---- zone 9: barrels, booms
     if (fz >= 8 && fz <= 10) {
-      for (const pr of this.parrots) {
-        const W = this.period(7);
-        const tt = t + pr.f.ph;
-        const slot = Math.floor(tt / W);
-        const ph = (tt - slot * W) / W * 7;
-        const perch = pr.f.perch;
-        const tp = this.tower.plats[pr.f.targets[Math.floor(hash01(this.seed, slot, pr.f.targets.length) * pr.f.targets.length)]];
-        const target = new THREE.Vector3(tp.cx ?? tp.x, (tp.ctop ?? tp.top) + 0.7, tp.cz ?? tp.z);
-        const hover = new THREE.Vector3(perch.x, perch.y + 1, perch.z);
-        let pos;
-        pr.outline.visible = false;
-        if (ph < 3) pos = new THREE.Vector3(perch.x, perch.y, perch.z);
-        else if (ph < 4) {
-          pos = hover.clone();
-          pos.y += Math.sin(ph * 20) * 0.1;
-          pr.outline.visible = true;
-          if (pr.warned !== slot && player && pz === 9 && P.distanceTo(pos) < 12) { pr.warned = slot; audio.play('beep'); }
-        } else if (ph < 5) pos = hover.clone().lerp(target, ph - 4);
-        else pos = target.clone().lerp(new THREE.Vector3(perch.x, perch.y, perch.z), Math.min(1, (ph - 5) / 1.5));
-        pr.g.position.copy(pos);
-        if (ph >= 4 && ph < 5) pr.g.lookAt(target);
-        else pr.g.lookAt(pos.x * 3, pos.y, pos.z * 3);
-        const flap = Math.sin(t * (ph >= 3 ? 30 : 4)) * 0.6;
-        pr.wings[0].rotation.z = flap;
-        pr.wings[1].rotation.z = -flap;
-        if (player && pz === 9 && !safe && ph >= 4 && ph < 5.2 && pr.hitSlot !== slot && P.distanceTo(new THREE.Vector3(pos.x, pos.y - 0.4, pos.z)) < 1.3) {
-          pr.hitSlot = slot;
-          audio.play('push');
-          const d = target.clone().sub(hover);
-          player.hazardPush(d.x, d.z, 4 * push, 3, 0);
-        }
-      }
       for (const br of this.barrels) {
         const W = this.period(5);
         const tt = t + br.p.ph;

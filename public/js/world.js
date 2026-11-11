@@ -618,8 +618,8 @@ export class World {
       ctx.fillText(label, x + w / 2, y + 21);
     };
     switch (icon) {
-      case 'move': key(98, 22, 44, 'W'); key(50, 66, 44, 'A'); key(98, 66, 44, 'S'); key(146, 66, 44, 'D'); ctx.font = `44px ${emoji}`; ctx.fillText('🕹️', 214, 64); ctx.font = `30px ${emoji}`; ctx.fillText('➡️🏃', 128, 130); break;
-      case 'camera': ctx.font = `60px ${emoji}`; ctx.fillText('🖱️', 80, 70); ctx.fillText('👆', 180, 70); ctx.font = `32px ${emoji}`; ctx.fillText('↔️ 👀 ↕️', 128, 128); break;
+      case 'move': key(98, 18, 44, 'W'); key(50, 62, 44, 'A'); key(98, 62, 44, 'S'); key(146, 62, 44, 'D'); ctx.font = `40px ${emoji}`; ctx.fillText('🕹️', 216, 62); ctx.font = `30px ${emoji}`; ctx.fillText('🏃💨', 128, 132); break;
+      case 'camera': key(98, 18, 44, '↑'); key(50, 62, 44, '←'); key(98, 62, 44, '↓'); key(146, 62, 44, '→'); ctx.font = `40px ${emoji}`; ctx.fillText('👆', 216, 62); ctx.font = `30px ${emoji}`; ctx.fillText('🎥 👀', 128, 132); break;
       case 'jump': key(40, 50, 120, 'SPACE'); ctx.font = `56px ${emoji}`; ctx.fillText('⤴️', 200, 70); ctx.font = `30px ${emoji}`; ctx.fillText('🐰⬆️', 128, 128); break;
       case 'double': key(16, 50, 100, 'SPACE'); key(140, 50, 100, 'SPACE'); ctx.font = `34px ${emoji}`; ctx.fillText('⬆️ ⬆️  = 🌀', 128, 128); break;
       case 'gate': ctx.font = `56px ${emoji}`; ctx.fillText('🦉❓', 128, 62); ctx.font = `34px ${emoji}`; ctx.fillText('✅✅✅ ➡️ ⬆️', 128, 124); break;
@@ -726,7 +726,7 @@ export class World {
     for (let i = 0; i < 4; i++) {
       const a = rand() * Math.PI * 2;
       const gear = new THREE.Mesh(new THREE.TorusGeometry(6, 1.2, 6, 12), toon('#8a6a35'));
-      gear.position.set(Math.cos(a) * 40, 6 * ZONE_H + 10 + i * 18, Math.sin(a) * 40);
+      gear.position.set(Math.cos(a) * 40, 6 * ZONE_H + 8 + i * 13, Math.sin(a) * 40);
       gear.lookAt(0, gear.position.y, 0);
       gear.userData.spin = (i % 2 ? 1 : -1) * 0.3;
       this.zoneGroups[7].add(gear);
@@ -923,10 +923,10 @@ export class World {
     const far = this.quality === 'low' ? 90 : 170;
     this.scene.fog.far = far;
     this.scene.fog.near = far * 0.3;
-    const night = Math.max(0, Math.min(1, (camPos.y - 600) / 120));
+    const night = Math.max(0, Math.min(1, (camPos.y - 7.5 * ZONE_H) / (1.5 * ZONE_H)));
     this.stars.material.opacity = night;
     this.stars.position.copy(camPos);
-    this.planets.visible = camPos.y > 640;
+    this.planets.visible = camPos.y > 8 * ZONE_H;
     if (this.planets.visible) this.planets.position.set(camPos.x * 0.9, camPos.y - 40, camPos.z * 0.9);
     this.updateParticles(dt, camPos, cz);
   }

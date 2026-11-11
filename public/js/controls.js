@@ -27,7 +27,7 @@ export class Controls {
       if (isTyping(e)) return;
       if (!this.enabled) return;
       const k = e.code;
-      if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) e.preventDefault();
+      if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(k)) e.preventDefault();
       if (e.repeat) return;
       this.keys.add(k);
       if (k === 'Space') { this.jumpHeld = true; this.actions.push('jump'); }
@@ -44,22 +44,19 @@ export class Controls {
     });
     window.addEventListener('blur', () => { this.keys.clear(); this.jumpHeld = false; });
 
-    // Mouse: pointer lock look, or right-drag; left click uses item.
+    // Mouse is optional: drag with any button to look around, scroll to zoom.
+    // Everything can be done from the keyboard (WASD to move, arrow keys for the camera).
     const c = this.canvas;
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     c.addEventListener('mousedown', (e) => {
       if (!this.enabled || this.isTouchEvent) return;
-      if (e.button === 2) { this.dragging = true; return; }
-      if (e.button === 0) {
-        if (document.pointerLockElement !== c) {
-          if (this.allowLock) c.requestPointerLock?.();
-        } else this.actions.push('use');
-      }
+      this.dragging = true;
+      c.focus();
     });
-    window.addEventListener('mouseup', (e) => { if (e.button === 2) this.dragging = false; });
+    window.addEventListener('mouseup', () => { this.dragging = false; });
     window.addEventListener('mousemove', (e) => {
       if (!this.enabled) return;
-      if (document.pointerLockElement === c || this.dragging) {
+      if (this.dragging) {
         this.look.x += e.movementX;
         this.look.y += e.movementY;
         this.lastCamInput = performance.now();
@@ -153,16 +150,29 @@ export class Controls {
   move() {
     let x = 0;
     let y = 0;
-    if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) y += 1;
-    if (this.keys.has('KeyS') || this.keys.has('ArrowDown')) y -= 1;
-    if (this.keys.has('KeyD') || this.keys.has('ArrowRight')) x += 1;
-    if (this.keys.has('KeyA') || this.keys.has('ArrowLeft')) x -= 1;
+    if (this.keys.has('KeyW')) y += 1;
+    if (this.keys.has('KeyS')) y -= 1;
+    if (this.keys.has('KeyD')) x += 1;
+    if (this.keys.has('KeyA')) x -= 1;
     x += this.joy.x;
     y += this.joy.y;
     const l = Math.hypot(x, y);
     if (l > 1) { x /= l; y /= l; }
     if (l < 0.12) { x = 0; y = 0; }
     return { x, y };
+  }
+
+  // Arrow keys turn the camera (left/right) and tilt it (up/down); +/- or PageUp/PageDown zoom.
+  keyLook() {
+    let x = 0, y = 0, z = 0;
+    if (this.keys.has('ArrowLeft')) x -= 1;
+    if (this.keys.has('ArrowRight')) x += 1;
+    if (this.keys.has('ArrowUp')) y += 1;
+    if (this.keys.has('ArrowDown')) y -= 1;
+    if (this.keys.has('Equal') || this.keys.has('NumpadAdd') || this.keys.has('PageUp')) z -= 1;
+    if (this.keys.has('Minus') || this.keys.has('NumpadSubtract') || this.keys.has('PageDown')) z += 1;
+    if (x || y) this.lastCamInput = performance.now();
+    return { x, y, z };
   }
 
   take() {

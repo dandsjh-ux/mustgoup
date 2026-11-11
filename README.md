@@ -1,6 +1,6 @@
 # Must Go Up
 
-A multiplayer 3D platformer for young English learners. Students race up an 800-block tower; every 40 blocks a question gate makes them answer English questions (from the teacher's CSV) before they can keep climbing. Runs in the browser on PCs and tablets — nothing to install.
+A multiplayer 3D platformer for young English learners. Students race up a 600-block tower (10 zones of 60 blocks); every 30 blocks a question gate makes them answer English questions (from the teacher's CSV) before they can keep climbing. Runs in the browser on PCs and tablets — nothing to install.
 
 ## Run locally
 
@@ -12,6 +12,27 @@ npm start
 Open http://localhost:3000, click **Host Game**, then join from other tabs/devices with the 4-letter code (or the QR code / join link).
 
 `npm run check` runs a reachability check over 90 generated towers (every main-route jump fits its zone's limits).
+
+## Controls
+
+| Action | PC (no mouse needed) | Tablet |
+|---|---|---|
+| Move | W A S D | Left joystick |
+| Camera | Arrow keys (← → turn, ↑ ↓ tilt), + / − zoom | Swipe on the right half |
+| Jump / double jump / jetpack | Space (1, 2 or 3 presses) | Jump button |
+| Use item / choose slot | E / 1–4 | Item button / tap a slot |
+| Rewind | R | Rewind button (while falling) |
+| Emotes | T then 1–4 | Emote button |
+| Leaderboard | Tab | Trophy button |
+| Answer a gate question | 1–4 or click | Tap |
+
+The mouse is optional: drag to look around, scroll to zoom.
+
+## The climb
+
+- Platforms come in four sizes (tiny, small, medium, normal) from zone 1, with more small and tiny ones higher up.
+- Moving platforms start in zone 1 (sliders and lifts) and every zone adds its own (leaf lifts, crumbling ledges, ice, fading clouds, balloons, gears, airships, …).
+- Telegraphed hazards in every zone: **swooping birds** (red outline, ❗ and a red target ring for over a second before they dive) and **water spouts** (bubbling with a pulsing blue ring before they erupt and push you off). Zones 8–10 add wind, lightning, Gust Puffs, parrots, barrels, booms, asteroids, meteors and low gravity. The Hazard level setting (Gentle / Standard / Wild) scales how often they fire.
 
 ## Deploy to Render
 
@@ -40,7 +61,7 @@ Game state lives in memory on a single instance, so keep it to **one instance** 
 |---|---|
 | Room size | Max **10** players (setting 2–10) |
 | Offensive items default | **On** |
-| Default finish line | **Full 800 blocks** |
+| Default finish line | **Full tower** (now 600 blocks: zones were shortened to 60 blocks with a gate every 30) |
 | Pass through or bump | **Light bumping** between players |
 | Team mode | **Yes** — teams of 2–4 (lobby setting), ranked by combined height; members respawn at the **highest checkpoint reached by any teammate** |
 | Shop cosmetics | **Useful items only** in the shop; a few hats and trails are **free to pick** at the start |

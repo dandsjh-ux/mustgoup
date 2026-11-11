@@ -115,7 +115,6 @@ class Game {
     if (this.spectator) this.setupSpectator(opts.code);
     this.controls.reset();
     this.controls.enabled = true;
-    this.controls.allowLock = !this.spectator && !this.controls.isTouch;
     this.running = true;
     this.hud.setTeam(this.teamText());
     audio.unlock();
@@ -908,9 +907,12 @@ class Game {
     const { actions, look, zoom } = this.controls.take();
     const jumpPressed = this.handleActions(actions);
     const sens = 0.0032 * prefs.sens;
-    this.cam.yaw -= look.x * sens;
-    this.cam.pitch = Math.max(-0.5, Math.min(1.25, this.cam.pitch + look.y * sens * (prefs.invert ? -1 : 1)));
-    this.cam.dist = Math.max(3, Math.min(this.spectator ? 40 : 14, this.cam.dist + zoom * 0.8));
+    const kl = this.controls.keyLook();
+    // Up arrow looks up (camera drops lower); Invert flips it, same as mouse
+    const inv = prefs.invert ? -1 : 1;
+    this.cam.yaw -= look.x * sens + kl.x * 2.2 * prefs.sens * dt;
+    this.cam.pitch = Math.max(-0.5, Math.min(1.25, this.cam.pitch + look.y * sens * inv - kl.y * 1.4 * prefs.sens * dt * inv));
+    this.cam.dist = Math.max(3, Math.min(this.spectator ? 40 : 14, this.cam.dist + zoom * 0.8 + kl.z * 10 * dt));
 
     const p = this.player;
     const live = t >= 0 && !this.paused();
@@ -933,10 +935,10 @@ class Game {
       }
       if (steps === 8) this.acc = 0;
       this.gameRules(dt);
-      // tablet auto-follow camera
-      if (this.controls.isTouch && now - this.controls.lastCamInput > 1200) {
+      // follow camera: while running forwards and not steering the camera, swing it gently behind the player
+      if (now - this.controls.lastCamInput > 1200) {
         const sp = Math.hypot(p.vel.x, p.vel.z);
-        if (sp > 1 && this.controls.joy.y > -0.3) {
+        if (sp > 1 && this.controls.move().y > 0.5) {
           let d = p.yaw + Math.PI - this.cam.yaw;
           while (d > Math.PI) d -= Math.PI * 2;
           while (d < -Math.PI) d += Math.PI * 2;
@@ -974,7 +976,7 @@ class Game {
 
     this.updateCamera(dt, focus);
     audio.setZone(zoneAt(Math.max(0, focus.y)));
-    this.hemi.intensity = focus.y > 640 ? 1.2 : 1.5;
+    this.hemi.intensity = focus.y > 8 * ZONE_H ? 1.2 : 1.5;
 
     if (p) {
       const cpZone = zoneAt(p.pos.y);
