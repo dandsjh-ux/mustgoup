@@ -115,6 +115,8 @@ class Game {
     if (this.spectator) this.setupSpectator(opts.code);
     this.controls.reset();
     this.controls.enabled = true;
+    if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+    this.canvas.focus({ preventScroll: true });
     this.running = true;
     this.hud.setTeam(this.teamText());
     audio.unlock();
@@ -916,20 +918,23 @@ class Game {
 
     const p = this.player;
     const live = t >= 0 && !this.paused();
+    // Physics runs at a fixed 60 steps/s, so on fast displays (120/144 Hz) many frames run no step at all.
+    // Keep a press waiting until a physics step actually uses it, instead of dropping it with the frame.
+    if (jumpPressed) this.pendingJumpAt = now;
+    if (!live || (this.pendingJumpAt && now - this.pendingJumpAt > 250)) this.pendingJumpAt = 0;
     if (p && live) {
       this.acc += dt;
-      let first = true;
       let steps = 0;
       while (this.acc >= STEP && steps < 8) {
         const stepT = t - this.acc + STEP;
         this.world.step(stepT, STEP);
         p.step(STEP, {
           move: this.controls.move(),
-          jumpPressed: first && jumpPressed,
+          jumpPressed: !!this.pendingJumpAt,
           jumpHeld: this.controls.jumpHeld,
           locked: this.shop.open || p.respawning,
         }, this.cam.yaw);
-        first = false;
+        this.pendingJumpAt = 0;
         this.acc -= STEP;
         steps++;
       }

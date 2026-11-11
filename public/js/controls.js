@@ -28,6 +28,8 @@ export class Controls {
       if (!this.enabled) return;
       const k = e.code;
       if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown'].includes(k)) e.preventDefault();
+      // a focused button would also be "clicked" by Space/Enter; take focus away so the key only plays the game
+      if (document.activeElement?.tagName === 'BUTTON') document.activeElement.blur();
       if (e.repeat) return;
       this.keys.add(k);
       if (k === 'Space') { this.jumpHeld = true; this.actions.push('jump'); }
