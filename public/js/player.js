@@ -135,7 +135,10 @@ export class LocalPlayer {
     this.onBoost();
   }
 
+  // Steady weather currents (wind gusts, waterfalls). A Bubble Shield makes you immune to them entirely
+  // for as long as it is up; unlike a one-off push this does not use the shield up.
   addFlow(vx, vz) {
+    if (this.shield) return;
     this.flow.x += vx;
     this.flow.y += vz;
   }

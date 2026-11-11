@@ -9,7 +9,7 @@ export const ITEMS = {
   fuel: { name: 'Fuel Cell', kind: 'Mobility', price: 3, zone: 2, uses: 1, icon: '🔋', desc: 'Fills your jetpack tank again.', requires: 'jetpack' },
   glider: { name: 'Glider Cape', kind: 'Safety', price: 4, zone: 2, uses: 1, icon: '🪂', desc: 'Hold jump while you fall to glide slowly. It lasts until the next checkpoint.' },
   cloud: { name: 'Cloud Step', kind: 'Safety', price: 4, zone: 3, uses: 2, icon: '☁️', desc: 'Makes a cloud under your feet for 5 seconds. 2 uses.' },
-  shield: { name: 'Bubble Shield', kind: 'Defence', price: 4, zone: 3, uses: 1, icon: '🛡️', desc: 'Blocks the next push from an item, an enemy or the weather.' },
+  shield: { name: 'Bubble Shield', kind: 'Defence', price: 4, zone: 3, uses: 1, icon: '🛡️', desc: 'Blocks the next push from an item, an enemy or the weather. While it is on, wind and waterfall currents cannot move you at all.' },
   glove: { name: 'Boing Glove', kind: 'Offensive', price: 5, zone: 3, uses: 2, offensive: true, icon: '🥊', desc: 'Punch a player near you to push them back. 2 uses.' },
   cleats: { name: 'Ice Cleats', kind: 'Mobility', price: 3, zone: 4, kept: true, icon: '⛸️', desc: 'Your feet will not slip on ice any more. You keep them all game.' },
   gust: { name: 'Gust Bomb', kind: 'Offensive', price: 7, zone: 5, uses: 1, offensive: true, icon: '💨', desc: 'Throw a cloud bomb. It pushes away everyone near the place it lands.' },

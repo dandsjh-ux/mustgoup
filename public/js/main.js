@@ -685,7 +685,7 @@ class Game {
     if (type === 'spring') { p.spring = true; toast('👟 Spring Shoes on: jump 30% higher until the next checkpoint.', 'good'); }
     if (type === 'snack') { p.snackUntil = p.time + 15; toast('🍪 Yum! Super speed for 15 seconds.', 'good'); }
     if (type === 'glider') { p.glider = true; toast('🪂 Glider Cape on: hold Jump while falling.', 'good'); }
-    if (type === 'shield') toast('🛡️ Bubble Shield on: it blocks the next push.', 'good');
+    if (type === 'shield') toast('🛡️ Bubble Shield on: wind can’t move you and it blocks the next push.', 'good');
     if (type === 'fuel') { p.jet.fuel = 3; toast('🔋 Jetpack tank full!', 'good'); }
   }
 
